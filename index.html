@@ -122,7 +122,10 @@ for msg in st.session_state.messages:
 
 # [입력 UI] 마이크와 텍스트 입력의 조합
 st.markdown('<div class="mic-container">', unsafe_allow_html=True)
-audio_data = mic_recorder(start_prompt="🎤 Speak to Teacher", stop_prompt="🛑 Stop", key="mic_vercel")
+
+# 마이크 버튼의 Key를 메시지 개수에 연동하여 매 대화마다 리셋되도록 합니다.
+mic_key = f"mic_vercel_{len(st.session_state.messages)}"
+audio_data = mic_recorder(start_prompt="🎤 Speak to Teacher", stop_prompt="🛑 Stop", key=mic_key)
 st.markdown('</div>', unsafe_allow_html=True)
 
 text_input = st.chat_input("Or type your message here...")
