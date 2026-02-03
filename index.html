@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <title>My AI Teacher - Vercel</title>
+    <title>My AI Teacher - Vercel Voice</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.58.0/build/stlite.css" />
 </head>
 
@@ -21,12 +21,14 @@
                     "app_vercel.py": `import streamlit as st
 import requests
 import json
-from gtts import gTTS
+import base64
 import io
+from gtts import gTTS
 from streamlit_mic_recorder import mic_recorder
 
 st.set_page_config(page_title="My AI Teacher", page_icon="🎓", layout="centered")
 
+# [보완된 UI 디자인] 마이크 버튼과 입력창 배치를 위한 스타일
 st.markdown("""
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
@@ -36,15 +38,18 @@ st.markdown("""
     .app-header h1 { font-family: 'Outfit', sans-serif; font-size: 1.8rem; color: #0f172a; margin: 0; }
     [data-testid="stSidebar"] { background-color: #f8fafc; border-right: 1px solid #e2e8f0; }
     .stChatInputContainer { border-radius: 16px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important; }
+    /* 마이크와 입력창 정렬 */
+    .mic-container { margin-top: 10px; display: flex; justify-content: flex-start; }
     </style>
     <div class="app-header">
         <h1>🎓 My AI Teacher</h1>
-        <p>Vercel Serverless Edition</p>
+        <p>Vercel Voice-Enabled Edition</p>
     </div>
     """, unsafe_allow_html=True)
 
 if "messages" not in st.session_state: st.session_state.messages = []
 if "history" not in st.session_state: st.session_state.history = []
+if "last_processed_audio" not in st.session_state: st.session_state.last_processed_audio = None
 
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
@@ -54,18 +59,31 @@ with st.sidebar:
     if st.button("🔄 Start New Session"):
         st.session_state.messages = []; st.session_state.history = []; st.rerun()
 
-def call_gemini_api(prompt, api_key):
-    # Gemini 2.0 Flash와 v1beta 버전을 사용하도록 업데이트했습니다.
+# [중요] 텍스트 및 음성을 모두 처리하는 API 함수
+def call_gemini_api(prompt, api_key, audio_bytes=None):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     headers = {'Content-Type': 'application/json'}
-    contents = st.session_state.history + [{"role": "user", "parts": [{"text": prompt}]}]
+    
+    parts = []
+    if audio_bytes:
+        # 음성 데이터를 Base64로 인코딩하여 전달
+        audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
+        parts.append({"inline_data": {"mime_type": "audio/wav", "data": audio_b64}})
+        parts.append({"text": prompt if prompt else "Please transcribe and reply to this audio as an English teacher."})
+    else:
+        parts.append({"text": prompt})
+
+    # 전체 히스토리와 현재 메시지 결합
+    contents = st.session_state.history + [{"role": "user", "parts": parts}]
     data = {"contents": contents}
+    
     try:
         response = requests.post(url, headers=headers, data=json.dumps(data))
         if response.status_code == 200:
             result = response.json()
             ai_text = result['candidates'][0]['content']['parts'][0]['text']
-            st.session_state.history.append({"role": "user", "parts": [{"text": prompt}]})
+            # 히스토리에는 텍스트 위주로 저장 (경량화)
+            st.session_state.history.append({"role": "user", "parts": [{"text": prompt if prompt else "[Voice Message]"}]})
             st.session_state.history.append({"role": "model", "parts": [{"text": ai_text}]})
             return ai_text
         return f"Error: {response.text}"
@@ -73,7 +91,11 @@ def call_gemini_api(prompt, api_key):
         return f"Request Error: {e}"
 
 def text_to_speech(text):
-    main_text = text.split('\\n')[0]
+    main_text = ""
+    for line in text.split('\\n'):
+        if line.strip() and not any(s in line for s in ["💡", "🎯"]):
+            main_text = line; break
+    if not main_text: return None
     try:
         tts = gTTS(text=main_text, lang='en')
         fp = io.BytesIO()
@@ -82,17 +104,15 @@ def text_to_speech(text):
     except: return None
 
 if not api_key:
-    st.info("사이드바에 API Key를 입력해주세요.")
+    st.info("Please enter your API Key in the sidebar.")
     st.stop()
 
+# 첫 인사
 if not st.session_state.messages:
-    system_instruction = f"You are a friendly English teacher. Student: {level}, Topic: {topic}. Start the conversation warmly."
-    ai_greeting = call_gemini_api(system_instruction, api_key)
-    if "Error" not in ai_greeting:
-        st.session_state.messages.append({"role": "assistant", "content": ai_greeting})
-    else:
-        st.error(ai_greeting)
+    greeting = call_gemini_api(f"You are a friendly English teacher. Level: {level}, Topic: {topic}. Start the conversation warm.", api_key)
+    st.session_state.messages.append({"role": "assistant", "content": greeting})
 
+# 대화 출력
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
@@ -100,16 +120,43 @@ for msg in st.session_state.messages:
             audio_fp = text_to_speech(msg["content"])
             if audio_fp: st.audio(audio_fp, format="audio/mp3")
 
-text_input = st.chat_input("Say something...")
+# [입력 UI] 마이크와 텍스트 입력의 조합
+st.markdown('<div class="mic-container">', unsafe_allow_html=True)
+audio_data = mic_recorder(start_prompt="🎤 Speak to Teacher", stop_prompt="🛑 Stop", key="mic_vercel")
+st.markdown('</div>', unsafe_allow_html=True)
+
+text_input = st.chat_input("Or type your message here...")
+
+user_input_to_process = None
+current_audio_bytes = None
+
+# 음성 입력 처리
+if audio_data:
+    audio_id = audio_data['id'] if 'id' in audio_data else hash(audio_data['bytes'])
+    if st.session_state.last_processed_audio != audio_id:
+        current_audio_bytes = audio_data['bytes']
+        st.session_state.last_processed_audio = audio_id
+
+# 텍스트 또는 음성 중 하나가 있으면 진행
 if text_input:
-    st.session_state.messages.append({"role": "user", "content": text_input})
+    user_input_to_process = text_input
+elif current_audio_bytes:
+    user_input_to_process = None # API에서 오디오로 알아서 처리됨
+
+if user_input_to_process or current_audio_bytes:
+    if user_input_to_process:
+        st.session_state.messages.append({"role": "user", "content": user_input_to_process})
+    else:
+        st.session_state.messages.append({"role": "user", "content": "🎙️ (Voice Message sent)"})
+
     with st.chat_message("assistant"):
-        ai_res = call_gemini_api(text_input, api_key)
-        st.markdown(ai_res)
-        audio_fp = text_to_speech(ai_res)
-        if audio_fp: st.audio(audio_fp, format="audio/mp3")
-        st.session_state.messages.append({"role": "assistant", "content": ai_res})
-        st.rerun()`
+        with st.spinner("Analyzing..."):
+            ai_res = call_gemini_api(user_input_to_process, api_key, current_audio_bytes)
+            st.markdown(ai_res)
+            audio_fp = text_to_speech(ai_res)
+            if audio_fp: st.audio(audio_fp, format="audio/mp3")
+            st.session_state.messages.append({"role": "assistant", "content": ai_res})
+            st.rerun()`
                 },
             },
             document.getElementById("root")
