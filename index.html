@@ -107,9 +107,20 @@ if not api_key:
     st.info("Please enter your API Key in the sidebar.")
     st.stop()
 
-# 첫 인사
+# 첫 인사 및 시스템 지침 설정
 if not st.session_state.messages:
-    greeting = call_gemini_api(f"You are a friendly English teacher. Level: {level}, Topic: {topic}. Start the conversation warm.", api_key)
+    # AI가 대화를 주도하도록 지침 보강
+    system_instruction = f"""
+    You are a proactive and friendly English teacher. 
+    Student: {level}, Topic: {topic}. 
+    
+    Rules:
+    1. Always provide a gentle correction if the student makes a mistake (using '💡 Correction').
+    2. NEVER end your turn without asking a clear, engaging question to the student.
+    3. Keep the conversation moving forward. If the student is shy, give them an example answer.
+    4. Start the conversation by introducing the topic and asking a warm-up question.
+    """
+    greeting = call_gemini_api(system_instruction, api_key)
     st.session_state.messages.append({"role": "assistant", "content": greeting})
 
 # 대화 출력
