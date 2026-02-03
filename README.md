@@ -62,5 +62,16 @@ streamlit run app_modern.py
 
 ---
 
+## 🌐 웹 서비스로 배포하기 (Deploy to Web)
+
+이 저장소의 코드는 **Streamlit Community Cloud**를 통해 무료로 웹에 배포할 수 있습니다.
+
+1. [Streamlit Cloud](https://share.streamlit.io/)에 접속하여 GitHub 로그인을 합니다.
+2. **'New app'** 버튼을 클릭하고 이 저장소를 선택합니다.
+3. 메인 파일 경로를 `app_modern.py`로 설정하고 **'Deploy'** 버튼을 누릅니다.
+4. 배포가 완료되면 부여된 URL을 통해 스마트폰이나 다른 PC에서도 수업을 진행할 수 있습니다.
+
+---
+
 ## 📄 라이선스
 이 프로젝트는 MIT 라이선스를 따릅니다.
