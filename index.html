@@ -15,7 +15,6 @@
   <script>
     stlite.mount(
       {
-        // 'google-generativeai'를 완전히 제거하고 'requests'를 추가했습니다.
         requirements: ["requests", "gTTS", "streamlit-mic-recorder"],
         entrypoint: "app_vercel.py",
         files: {
@@ -56,7 +55,8 @@ with st.sidebar:
         st.session_state.messages = []; st.session_state.history = []; st.rerun()
 
 def call_gemini_api(prompt, api_key):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # API 버전을 v1으로 변경하고 모델명을 gemini-1.5-flash로 통일했습니다.
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
     headers = {'Content-Type': 'application/json'}
     contents = st.session_state.history + [{"role": "user", "parts": [{"text": prompt}]}]
     data = {"contents": contents}
@@ -88,7 +88,10 @@ if not api_key:
 if not st.session_state.messages:
     system_instruction = f"You are a friendly English teacher. Student: {level}, Topic: {topic}. Start the conversation warmly."
     ai_greeting = call_gemini_api(system_instruction, api_key)
-    st.session_state.messages.append({"role": "assistant", "content": ai_greeting})
+    if "Error" not in ai_greeting:
+        st.session_state.messages.append({"role": "assistant", "content": ai_greeting})
+    else:
+        st.error(ai_greeting)
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
