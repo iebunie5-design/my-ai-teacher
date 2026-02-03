@@ -115,7 +115,14 @@ if "last_processed_audio" not in st.session_state:
 # [사이드바 설정] 최소화된 디자인
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
-    api_key = st.text_input("Gemini API Key", type="password")
+    
+    # 1. secrets.toml 또는 Streamlit Cloud Secrets에서 키 확인
+    if "GEMINI_API_KEY" in st.secrets:
+        st.success("✅ API Key loaded from secrets")
+        api_key = st.secrets["GEMINI_API_KEY"]
+    else:
+        # 2. 설정이 없는 경우에만 입력창 표시
+        api_key = st.text_input("Gemini API Key", type="password", help="Enter your key here or set it in secrets.toml")
     
     level = st.selectbox("Your Level", ["초급", "중급", "고급"])
     topic = st.selectbox("Topic", ["자기소개", "여행", "쇼핑", "음식점", "직장생활", "자유대화"])
@@ -129,11 +136,19 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.caption("v2.0 Modern Edition")
+    st.caption("v2.1 Secured Edition")
 
 # [핵심 로직]
 def text_to_speech(text):
-    main_text = text.split('\n')[0]
+    # '💡 Correction' 이나 '🎯 Suggested' 로 시작하지 않는 첫 문장만 음성으로 변환
+    main_text = ""
+    for line in text.split('\n'):
+        if line.strip() and not any(symbol in line for symbol in ["💡", "🎯", "🗣️"]):
+            main_text = line
+            break
+    
+    if not main_text: return None
+    
     try:
         tts = gTTS(text=main_text, lang='en')
         fp = io.BytesIO()
@@ -142,6 +157,7 @@ def text_to_speech(text):
     except Exception:
         return None
 
+# API 키가 여전히 없을 때만 안내 메시지 출력
 if not api_key:
     st.markdown('<div class="system-notification">🔑 Please enter your Gemini API Key in the sidebar to start learning.</div>', unsafe_allow_html=True)
     st.stop()
